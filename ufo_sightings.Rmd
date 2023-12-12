@@ -1,0 +1,236 @@
+---
+title: "UFO_analysis"
+author: "Surekha Peethambaram Muralidhar, Mrudula Nimmala, Sakshi Gundawar"
+date: "2023-11-16"
+output:
+  html_document:
+    keep_md: yes
+    self_contained: yes
+    pandoc_args: "--webtex"
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+if (!knitr::is_html_output()) {
+  knitr::opts_chunk$set(webshot = TRUE)
+}
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(openintro)
+library(knitr)
+library(gtsummary)
+library(tidyr)
+library(readr)
+library(tidyverse)
+library(sf)
+library(mapview)
+
+
+ufo_sightings_transformed <- read_csv("ufo-sightings-transformed.csv")
+```
+## Corece Into Factors
+```{r}
+ ufo_sightings_transformed <- ufo_sightings_transformed %>% 
+      mutate(Season = factor(Season),
+             Country_Code = factor(Country_Code),
+             Country = factor(Country),
+             UFO_shape = factor(UFO_shape),
+             Country = factor(Country),
+             Year = factor(Year),
+             Hour = factor(Hour),
+             Region = factor(Region)
+      )
+```
+
+## Summary Stats
+```{r}
+
+library(dplyr)
+library(gtsummary)
+
+
+# Create the summary table
+UFO_summary_table <- ufo_sightings_transformed %>%
+  select(length_of_encounter_seconds, Season,Month) %>%
+  gtsummary::tbl_summary(
+    statistic = list(
+      all_continuous() ~ "{mean} ({sd})",
+      all_categorical() ~ "{n} ({p}%)"),
+    )
+# Print the summary table
+UFO_summary_table
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r}
+
+# Install and load necessary packages
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+  install.packages("ggplot2")
+}
+library(ggplot2)
+
+# Create a bar plot with reduced width
+ggplot(ufo_sightings_transformed, aes(x = Season)) +
+  geom_bar(fill = "skyblue", color = "darkblue", width = 0.5) +
+  labs(title = "Bar Plot For UFO Sightings appeared in Different Seasons", x = "Season", y = "Count") +
+  theme_minimal()
+
+```
+
+```{r}
+
+ufo_sightings_transformed <- na.omit(ufo_sightings_transformed)
+
+```
+
+## 1.Write the hypotheses
+
+$H_0:$ The average UFO sighting in California Region is equal to that of the average UFO sightings in England Region.
+
+
+$\mu_{cal}=\mu_{eng}$
+
+
+$H_A:$ The average UFO sighting in California Region is greater than that of the average UFO sightings in England Region.
+            
+$\mu_{cal} > \mu_{eng}$
+
+## 2.Check Conditions
+
+```{r}
+california_england_data <- ufo_sightings_transformed %>%
+  filter(Region %in% c("California", "England")) %>%
+  filter(!is.na(Region)) %>%
+  filter(length_of_encounter_seconds >= 0.1, length_of_encounter_seconds <= 15000, is.finite(length_of_encounter_seconds))
+
+# Sample 1000 rows including both regions
+sampled_data <- california_england_data %>%
+  group_by(Region) %>%
+  sample_n(500) %>%
+  ungroup()
+
+sampled_data %>% 
+  ggplot(aes(length_of_encounter_seconds, fill = Region)) +
+  geom_histogram(binwidth = 200, col = "white", show.legend = FALSE) +
+  facet_wrap(~ Region) +
+  labs(title = "Length of Encounter Seconds vs. Region") +
+  scale_x_continuous(breaks = seq(0, 5000, by = 500), limits = c(0, 5000))
+
+```
+
+## 3. Test Statistic
+
+```{r}
+
+California_ufo_sightings <- ufo_sightings_transformed %>%
+  filter(Region == "California", !is.na(length_of_encounter_seconds)) %>%
+  select(length_of_encounter_seconds) %>%
+  pull()
+
+england_ufo_sightings <- ufo_sightings_transformed %>%
+  filter(Region == "England", !is.na(length_of_encounter_seconds)) %>%
+  select(length_of_encounter_seconds) %>%
+  pull()
+
+
+
+n1 <- length(California_ufo_sightings)
+n2 <- length(england_ufo_sightings)
+
+```
+
+$n_1$ = `r n1`
+
+$n_2$ = `r n2`
+
+```{r}
+xbar1 <- mean(California_ufo_sightings)
+xbar2 <- mean(england_ufo_sightings)
+
+s1 <- sd(California_ufo_sightings)
+s2 <- sd(england_ufo_sightings)
+
+stat <- xbar1 - xbar2
+null_value <- 0
+se <- sqrt(s1^2/n1 + s2^2/n2)
+
+df <- min(c(n1, n2)) - 1
+
+t_stat <- (stat - null_value) / se 
+
+```
+
+$\mu_{cal}$=`r round(xbar1,4)`
+
+$\mu_{eng}$=`r round(xbar2,4)`
+
+$t_{stat}$ = `r round(t_stat, 4)`
+
+## 4.P-Value
+
+```{r}
+p_val <- pt(t_stat, df = df, lower.tail = FALSE)
+
+```
+
+$p-value$ = `r round(p_val, 4)`
+
+Decision:Fail to reject $H_0$
+
+Conclusion: We do not enough evidence that the difference in average of UFO sightings in California is greater than that average of UFO sightings in England.
+
+```{r}
+t.test(California_ufo_sightings, england_ufo_sightings, alternative = "greater",
+       conf.level = 0.95)
+```
+
+# MapView For Califorina
+
+```{r, results='asis', echo=FALSE}
+if (knitr::is_html_output() || knitr::is_latex_output()) {
+  ufo_cali <- ufo_sightings_transformed %>% 
+    filter(Region == "California")
+  mapview(ufo_cali, xcol = "longitude", ycol = "latitude", crs = 4269, grid = FALSE)
+}
+```
+
+
+
+# MapView Englnd Region
+
+```{r, results='asis', echo=FALSE}
+if (knitr::is_html_output() || knitr::is_latex_output()) {
+  ufo_england <- ufo_sightings_transformed %>% 
+    filter(Region == "England")
+  mapview(ufo_england, xcol = "longitude", ycol = "latitude", crs = 4269, grid = FALSE)
+}
+```
+
+
+# WORLD-MAP
+
+```{r, results='asis', echo=FALSE}
+
+# Basic map
+world <- map_data("world")
+
+if (knitr::is_html_output() || knitr::is_latex_output()) {
+  ggplot() +
+    geom_polygon(data = world, aes(x = long, y = lat, group = group), fill = "grey1", color = "black") +
+    geom_point(data = ufo_sightings_transformed, aes(x = longitude, y = latitude), color = "red3", size = 1) +
+    labs(title = "UFO Sightings Map", subtitle = "Cities with UFO sightings") +
+    theme_minimal()
+}
+```
+
+
